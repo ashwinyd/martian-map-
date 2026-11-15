@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Martian Map – Jezero EVA Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#120c0a;--panel:#1d1411;--panel2:#261a16;--line:#3a2a24;--text:#f2e6df;--mute:#a8948a;--accent:#ff7a3d;--ok:#5fd38d;--warn:#ffc04d;--bad:#ff5a5a;--cyan:#59d9ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#2a1510,#120c0a)}
+header h1{font:700 22px Rajdhani,sans-serif;letter-spacing:.06em;margin:0}
+header .sub{color:var(--mute);font-size:12px}
+header .sp{flex:1}
+.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;font:600 13px Inter}
+.btn:hover{border-color:var(--accent)}
+.btn.on{background:var(--accent);border-color:var(--accent);color:#1a0d07}
+main{display:grid;grid-template-columns:240px 1fr 330px;gap:0;height:calc(100vh - 54px);min-height:640px}
+aside{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:14px}
+aside.r{border-right:0;border-left:1px solid var(--line)}
+h2{font:700 13px Rajdhani,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:16px 0 8px}
+h2:first-child{margin-top:0}
+.layer{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;user-select:none}
+.layer:hover{background:var(--panel2)}
+.layer input{accent-color:var(--accent)}
+.layer small{display:block;color:var(--mute);font-size:11px}
+.legend{height:8px;border-radius:4px;margin:4px 8px 10px 30px}
+#mapwrap{position:relative;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center}
+canvas{max-width:100%;max-height:100%;cursor:crosshair}
+.hint{position:absolute;left:12px;bottom:12px;background:#000a;padding:6px 10px;border-radius:8px;font-size:12px;color:var(--mute)}
+.scale{position:absolute;right:14px;bottom:14px;font-size:11px;color:#fff;text-shadow:0 0 3px #000}
+.scale div{height:4px;background:#fff;width:100px;margin-bottom:3px}
+.stat{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:13px}
+.stat b{font:600 15px Rajdhani,sans-serif;text-align:right}
+.alert{border-radius:8px;padding:8px 10px;margin:6px 0;font-size:12.5px}
+.alert.ok{background:#16301f;color:var(--ok)}
+.alert.warn{background:#3a2c10;color:var(--warn)}
+.alert.bad{background:#3a1414;color:var(--bad)}
+.stop{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;cursor:pointer}
+.stop.sel{border-color:var(--accent)}
+.stop .t{font-weight:600}
+.stop .d{color:var(--mute);font-size:12px}
+.pov{margin-top:8px;border-radius:8px;overflow:hidden;background:#000;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:var(--mute);font-size:12px;text-align:center;padding:6px}
+.pov img{width:100%;height:100%;object-fit:cover}
+label.file{display:inline-block;margin-top:6px;font-size:12px;color:var(--cyan);cursor:pointer}
+label.file input{display:none}
+a{color:var(--cyan)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.note{font-size:11.5px;color:var(--mute)}
+/* HUD */
+#hud{position:fixed;inset:0;background:radial-gradient(ellipse at center,#2a160f 0%,#090504 75%);display:none;z-index:10;font-family:Rajdhani,sans-serif;color:#9ff3ff}
+#hud.on{display:block}
+#hud .visor{position:absolute;inset:4vh 4vw;border:2px solid #59d9ff55;border-radius:50% / 35%;box-shadow:inset 0 0 80px #59d9ff22}
+#hud .tl,#hud .tr,#hud .bl,#hud .br{position:absolute;font-size:20px;letter-spacing:.06em}
+#hud .tl{left:12vw;top:16vh}#hud .tr{right:12vw;top:16vh;text-align:right}
+#hud .bl{left:12vw;bottom:16vh}#hud .br{right:12vw;bottom:16vh;text-align:right}
+#hud .big{font-size:44px;font-weight:700;color:#fff}
+#hud .center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center}
+#hud .arrow{width:120px;height:120px;margin:0 auto 10px;transition:transform .3s}
+#hud .warnh{color:#ffc04d}#hud .badh{color:#ff6b6b}
+#hud .ctrl{position:absolute;left:50%;bottom:5vh;transform:translateX(-50%);width:min(560px,80vw);text-align:center;font-family:Inter;font-size:12px}
+#hud .mini{position:absolute;right:13vw;top:50%;transform:translateY(-50%);width:200px;height:140px;border:1px solid #59d9ff66;border-radius:8px;opacity:.85}
+@media (max-width:1000px){main{grid-template-columns:1fr;height:auto}aside{border:0}#mapwrap{height:60vh}}
+</style>
+</head>
+<body>
+<header>
+  <h1>MARTIAN&nbsp;MAP</h1>
+  <div class="sub">Jezero Crater · Western Delta · EVA Planner</div>
+  <div class="sp"></div>
+  <button class="btn" id="bAdd">+ Add stop</button>
+  <button class="btn" id="bReset">Default route</button>
+  <button class="btn on" id="bPlan">Planning</button>
+  <button class="btn" id="bHud">Visor HUD mode</button>
+</header>
+<main>
+<aside>
+  <h2>Layers</h2>
+  <div id="layers"></div>
+  <h2>Your Mars Trek captures</h2>
+  <div class="note">Import a capture of the same area at the same zoom: it replaces the matching simulated layer.</div>
+  <div class="row">
+    <label class="file">↥ Optical<input type="file" accept="image/*" data-l="optique"></label>
+    <label class="file">↥ Elevation<input type="file" accept="image/*" data-l="topo"></label>
+    <label class="file">↥ Thermal<input type="file" accept="image/*" data-l="thermique"></label>
+    <label class="file">↥ USGS Geology<input type="file" accept="image/*" data-l="geologie"></label>
+  </div>
+  <h2>Top layer opacity</h2>
+  <input type="range" id="op" min="20" max="100" value="70">
+  <h2>Walking assumptions</h2>
+  <div class="stat">
+    <span>Speed (flat ground)</span><b><span id="vS">2.0</span> km/h</b>
+  </div>
+  <input type="range" id="speed" min="10" max="35" value="20">
+  <div class="stat"><span>Science time / stop</span><b><span id="tS">30</span> min</b></div>
+  <input type="range" id="sci" min="10" max="90" step="5" value="30">
+  <div class="stat"><span>EVA endurance</span><b><span id="eS">7</span> h</b></div>
+  <input type="range" id="eva" min="3" max="9" value="7">
+  <div class="stat"><span>Start time (Mars local time)</span><b><span id="stS">08:00</span></b></div>
+  <input type="range" id="start" min="12" max="28" value="16">
+  <div class="stat"><span>Maximum allowed slope</span><b><span id="pS">15</span>°</b></div>
+  <input type="range" id="pmax" min="8" max="25" value="15">
+  <p class="note">Assumed values, to be tuned by the team. The terrain shown is a <b>schematic mock-up</b> of the area (approximate positions): replace it with your Mars Trek captures.</p>
+  <h2>NASA resources</h2>
+  <p class="note"><a href="https://trek.nasa.gov/mars/" target="_blank">Mars Trek (JPL)</a><br>
+  <a href="https://www.usgs.gov/programs/astrogeology-science-center" target="_blank">USGS-NASA Planetary Geologic Mapping</a><br>
+  <a href="https://mars.nasa.gov/mars2020/multimedia/raw-images/" target="_blank">Perseverance Raw Images</a><br>
+  <a href="https://worldview.earthdata.nasa.gov/" target="_blank">NASA Worldview</a> (interface model)</p>
+</aside>
+
+<div id="mapwrap">
+  <canvas id="c" width="1000" height="700"></canvas>
+  <div class="hint" id="hint">Click a stop to view it · “+ Add stop” then click the map</div>
+  <div class="scale"><div></div>500 m</div>
+</div>
+
+<aside class="r">
+  <h2>Route summary</h2>
+  <div class="stat">
+    <span>Total distance</span><b id="sDist">–</b>
+    <span>Elevation gain</span><b id="sUp">–</b>
+    <span>Max. slope on route</span><b id="sSlope">–</b>
+    <span>Walking time</span><b id="sWalk">–</b>
+    <span>Science time</span><b id="sSci">–</b>
+    <span>Total EVA duration</span><b id="sTot">–</b>
+    <span>Endurance margin</span><b id="sMarg">–</b>
+    <span>Max. distance to rover</span><b id="sRov">–</b>
+  </div>
+  <div id="alerts"></div>
+  <h2>Mars weather · Jezero</h2>
+  <canvas id="wx" width="300" height="130" style="width:100%;background:#120c0a;border-radius:8px"></canvas>
+  <div class="stat" style="margin-top:6px">
+    <span>EVA time window</span><b id="wWin">–</b>
+    <span>Coldest during EVA</span><b id="wMin">–</b>
+    <span>Warmest during EVA</span><b id="wMax">–</b>
+    <span>Air pressure</span><b id="wP">–</b>
+  </div>
+  <p class="note">Typical daily cycle measured by Perseverance (MEDA instrument) at Jezero: about −83 °C before sunrise to −22 °C in the afternoon; pressure about 718 Pa (less than 1% of Earth's), varying 2–5% during the day. Simple model, not a live forecast.</p>
+  <h2>Mission stops</h2>
+  <div id="stops"></div>
+  <h2>Crew</h2>
+  <p class="note">Two-person EVA (EV1 + EV2). The pressurized rover follows the route with the sampling gear and serves as an emergency shelter.</p>
+</aside>
+</main>
+
+<div id="hud">
+  <div class="visor"></div>
+  <canvas class="mini" id="mini" width="200" height="140"></canvas>
+  <div style="position:absolute;left:50%;top:9vh;transform:translateX(-50%);text-align:center;font-size:20px;letter-spacing:.08em"><span id="hClock">–</span> &nbsp;·&nbsp; <span id="hTemp">–</span> &nbsp;·&nbsp; <span id="hPres">–</span></div>
+  <div class="tl"><div>NEXT STOP</div><div class="big" id="hNext">–</div></div>
+  <div class="tr"><div>DISTANCE</div><div class="big" id="hDist">–</div><div id="hEta"></div></div>
+  <div class="center"><svg class="arrow" id="hArrow" viewBox="0 0 100 100"><polygon points="50,6 78,80 50,64 22,80" fill="#59d9ff" opacity=".9"/></svg><div id="hSlope">SLOPE –</div><div id="hTerrain"></div></div>
+  <div class="bl"><div>REMAINING ENDURANCE</div><div class="big" id="hO2">–</div></div>
+  <div class="br"><div>RETURN TO ROVER</div><div class="big" id="hRet">–</div><div id="hWarn"></div></div>
+  <div class="ctrl">Simulate progress along the route
+    <input type="range" id="prog" min="0" max="1000" value="0">
+    <button class="btn" id="bExit">Exit HUD</button></div>
+</div>
+
+<script>
+// ---------- Terrain model (schematic, ~6 km x 4.2 km, 30 m cells) ----------
+const W=200,H=140,CELL=30,PX=5;
+let seed=7;function rnd(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646}
+const P=[];for(let i=0;i<512;i++)P[i]=Math.floor(rnd()*256);
+function grad(h,x,y){const a=h*0.7853;return Math.cos(a)*x+Math.sin(a)*y}
+function noise(x,y){const X=Math.floor(x)&255,Y=Math.floor(y)&255;x-=Math.floor(x);y-=Math.floor(y);
+ const f=t=>t*t*(3-2*t),u=f(x),v=f(y);const aa=P[(P[X]+Y)&511],ab=P[(P[X]+Y+1)&511],ba=P[(P[X+1]+Y)&511],bb=P[(P[X+1]+Y+1)&511];
+ const l1=grad(aa,x,y)+(grad(ba,x-1,y)-grad(aa,x,y))*u,l2=grad(ab,x,y-1)+(grad(bb,x-1,y-1)-grad(ab,x,y-1))*u;return l1+(l2-l1)*v}
+function fbm(x,y){let s=0,a=1,f=1;for(let i=0;i<4;i++){s+=a*noise(x*f,y*f);a*=.5;f*=2}return s}
+const elev=new Float32Array(W*H),sand=new Uint8Array(W*H),rock=new Uint8Array(W*H),unit=new Uint8Array(W*H);
+const sig=t=>1/(1+Math.exp(-t));
+for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  const nx=x/W,ny=y/H,i=y*W+x;
+  const front=0.36+0.07*Math.sin(ny*6.5+0.8)+0.03*fbm(ny*4,3);
+  const delta=sig((front-nx)/0.018);                    // delta plateau to the west
+  const butte=Math.exp(-(((nx-.62)/.035)**2+((ny-.22)/.05)**2)); // isolated butte (Kodiak-like)
+  let h=-2560+85*delta+45*butte+6*fbm(nx*9,ny*9)+ 18*delta*fbm(nx*5+5,ny*5);
+  elev[i]=h;
+  // units: 0 crater floor (Máaz-like), 1 Séítah-like olivine ridges, 2 delta front, 3 delta top, 4 butte
+  if(butte>.35)unit[i]=4;else if(delta>.8)unit[i]=3;else if(delta>.12)unit[i]=2;
+  else if(ny>.62&&nx<.62&&nx>.3)unit[i]=1;else unit[i]=0;
+  const sandN=fbm(nx*7+11,ny*7+2);
+  if(unit[i]===1&&sandN>-.05)sand[i]=1;
+  if(unit[i]===0&&sandN>.55)sand[i]=1;
+}
+// boulders: denser on delta front
+for(let k=0;k<1400;k++){const x=Math.floor(rnd()*W),y=Math.floor(rnd()*H),i=y*W+x;
+  const p=unit[i]===2?.55:unit[i]===4?.4:unit[i]===1?.18:.06; if(rnd()<p)rock[i]=1;}
+const slope=new Float32Array(W*H);
+for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  const e=(xx,yy)=>elev[Math.min(H-1,Math.max(0,yy))*W+Math.min(W-1,Math.max(0,xx))];
+  const dx=(e(x+1,y)-e(x-1,y))/(2*CELL),dy=(e(x,y+1)-e(x,y-1))/(2*CELL);
+  slope[y*W+x]=Math.atan(Math.hypot(dx,dy))*180/Math.PI;
+}
+let eMin=1e9,eMax=-1e9;for(const v of elev){eMin=Math.min(eMin,v);eMax=Math.max(eMax,v)}
+
+// ---------- Layers ----------
+const UNIT_NAMES=["Crater floor","Rock ridges + dunes","Delta front","Delta top","Lone hill"];
+const UNIT_COL=[[176,112,82],[120,130,80],[205,160,95],[225,190,130],[150,95,120]];
+function lerpC(a,b,t){return a.map((v,k)=>v+(b[k]-v)*t)}
+function ramp(stops,t){t=Math.max(0,Math.min(1,t));const n=stops.length-1,i=Math.min(n-1,Math.floor(t*n));return lerpC(stops[i],stops[i+1],t*n-i)}
+function shade(i){const x=i%W,y=(i/W)|0;const a=elev[Math.max(0,y-1)*W+Math.max(0,x-1)],b=elev[Math.min(H-1,y+1)*W+Math.min(W-1,x+1)];return Math.max(.45,Math.min(1.35,1+(a-b)/40))}
+const LAYERS=[
+ {id:"optique",name:"Optical",src:"Mars Trek · CTX / HiRISE mosaic",legend:"linear-gradient(90deg,#5b3324,#c98a62,#f0c9a0)",on:true,
+  px:i=>{const s=shade(i);let c=[170+20*fbm((i%W)/9,(i/W)/9),110,78];if(sand[i])c=[120,82,62];if(unit[i]>=2)c=[195,150,110];if(rock[i])c=[70,52,44];return c.map(v=>v*s)}},
+ {id:"topo",name:"Topography",src:"Mars Trek · DEM / slopes",legend:"linear-gradient(90deg,#1b3b6f,#3fa7a0,#e8d36b,#e0603a)",on:false,
+  px:i=>{const t=(elev[i]-eMin)/(eMax-eMin);let c=ramp([[27,59,111],[63,167,160],[232,211,107],[224,96,58]],t).map(v=>v*shade(i));
+   const contour=Math.abs(((elev[i]-eMin)%10))<0.9;if(contour)c=c.map(v=>v*.55);return c}},
+ {id:"pente",name:"Hazardous slopes",src:"Computed from the DEM",legend:"linear-gradient(90deg,#2e7d4f,#e8c64a,#e0603a,#b3202a)",on:false,
+  px:i=>ramp([[46,125,79],[232,198,74],[224,96,58],[179,32,42]],slope[i]/25)},
+ {id:"thermique",name:"Thermal",src:"Mars Trek · thermal inertia (THEMIS)",legend:"linear-gradient(90deg,#140b3a,#7b2a8c,#e06a3a,#ffe9a0)",on:false,
+  px:i=>{let ti=.55+.15*fbm((i%W)/12,(i/W)/12);if(sand[i])ti=.15;if(rock[i])ti=.95;if(unit[i]===3)ti+=.1;return ramp([[20,11,58],[123,42,140],[224,106,58],[255,233,160]],ti)}},
+ {id:"geologie",name:"Geology",src:"USGS-NASA map (simplified units)",legend:"linear-gradient(90deg,#b07052,#788250,#cda05f,#e1be82,#965f78)",on:false,
+  px:i=>UNIT_COL[unit[i]].map(v=>v*(.8+.2*shade(i)))},
+ {id:"dangers",name:"Obstacles",src:"Boulders · sand · slopes > limit",legend:"linear-gradient(90deg,#ff5a5a,#ffc04d)",on:true,overlay:true},
+];
+const uploaded={};
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const layerImg={};
+function buildLayer(L){const cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d'),im=g.createImageData(W,H);
+  for(let i=0;i<W*H;i++){const col=L.px(i);im.data[i*4]=col[0];im.data[i*4+1]=col[1];im.data[i*4+2]=col[2];im.data[i*4+3]=255}
+  g.putImageData(im,0,0);return cv}
+LAYERS.forEach(L=>{if(!L.overlay)layerImg[L.id]=buildLayer(L)});
+
+const lw=document.getElementById('layers');
+LAYERS.forEach(L=>{const d=document.createElement('label');d.className='layer';
+  d.innerHTML=`<input type="checkbox" ${L.on?'checked':''}><span>${L.name}<small>${L.src}</small></span>`;
+  d.querySelector('input').onchange=e=>{L.on=e.target.checked;draw()};lw.appendChild(d);
+  const lg=document.createElement('div');lg.className='legend';lg.style.background=L.legend;lw.appendChild(lg)});
+document.querySelectorAll('input[type=file][data-l]').forEach(inp=>inp.onchange=e=>{
+  const f=e.target.files[0];if(!f)return;const img=new Image();img.onload=()=>{uploaded[inp.dataset.l]=img;const L=LAYERS.find(l=>l.id===inp.dataset.l);
+  if(L){L.on=true;L.src='Your capture: '+f.name;lw.innerHTML='';LAYERS.forEach(()=>{});rebuildLayerList()}draw()};img.src=URL.createObjectURL(f)});
+function rebuildLayerList(){lw.innerHTML='';LAYERS.forEach(L=>{const d=document.createElement('label');d.className='layer';
+  d.innerHTML=`<input type="checkbox" ${L.on?'checked':''}><span>${L.name}<small>${L.src}</small></span>`;
+  d.querySelector('input').onchange=e=>{L.on=e.target.checked;draw()};lw.appendChild(d);
+  const lg=document.createElement('div');lg.className='legend';lg.style.background=L.legend;lw.appendChild(lg)})}
+
+// ---------- Stops & route ----------
+const DEFAULT_STOPS=[
+ {name:"Rover / Base",x:150,y:70,type:"base",desc:"Start point on flat ground. The rover waits here.",see:"Flat ground with dark rocks and small stones."},
+ {name:"A · Rock ridges",x:108,y:105,desc:"Old volcanic rocks changed by water. Take a rock sample.",see:"Low rock lines with dark sand between them. Walk on the rock."},
+ {name:"B · Delta front",x:70,y:66,desc:"Rock layers left by an old river. Look at the layers and find clay minerals.",see:"A high cliff with big rocks at the bottom. Go up by the safe slope."},
+ {name:"C · Delta top",x:38,y:48,desc:"Stones brought by the river from far away. Take samples of different stones.",see:"Flat high ground with round stones. Open view to the west."},
+ {name:"D · Lone hill",x:124,y:31,desc:"A piece of old delta layers. Compare it with stop B.",see:"A steep hill alone on the plain. Look from the bottom only."},
+];
+let stops=JSON.parse(JSON.stringify(DEFAULT_STOPS)).map(s=>({...s,img:null}));
+let sel=0,addMode=false,route=[],legs=[];
+const rover=()=>stops[0];
+let speedKmh=2,sciMin=30,evaH=7,pMax=15,startH=8;
+// Weather model (Mars local hours 0-24). Shape fitted to MEDA values: min -83 C ~05:30, max -22 C ~14:00; pressure ~718 Pa, +-15 Pa, max ~07:30
+function tempC(h){h=((h%24)+24)%24;const tmin=-83,tmax=-22,a=5.5,b=14;
+  if(h>=a&&h<=b)return tmin+(tmax-tmin)*(1-Math.cos(Math.PI*(h-a)/(b-a)))/2;
+  const span=24-(b-a);const t=((h-b)+24)%24;return tmax-(tmax-tmin)*(1-Math.cos(Math.PI*t/span))/2}
+function presPa(h){return 718+15*Math.cos(2*Math.PI*(h-7.5)/24)}
+function clock(h){h=((h%24)+24)%24;const H=Math.floor(h),M=Math.round((h-H)*60)%60;return String(H+(Math.round((h-H)*60)===60?1:0)).padStart(2,'0')+':'+String(M).padStart(2,'0')}
+const SUNSET=18,SUNRISE=6;
+
+function passable(i){return !rock[i]&&slope[i]<=pMax}
+function cost(i){return 1+(sand[i]?2.5:0)+slope[i]/6}
+function astar(sx,sy,tx,ty){
+  const N=W*H,g=new Float32Array(N).fill(Infinity),came=new Int32Array(N).fill(-1),closed=new Uint8Array(N);
+  const s=sy*W+sx,t=ty*W+tx;g[s]=0;const heap=[[0,s]];
+  const push=(f,i)=>{heap.push([f,i]);let k=heap.length-1;while(k>0){const p=(k-1)>>1;if(heap[p][0]<=heap[k][0])break;[heap[p],heap[k]]=[heap[k],heap[p]];k=p}};
+  const pop=()=>{const top=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let k=0;for(;;){let l=2*k+1,r=l+1,m=k;if(l<heap.length&&heap[l][0]<heap[m][0])m=l;if(r<heap.length&&heap[r][0]<heap[m][0])m=r;if(m===k)break;[heap[m],heap[k]]=[heap[k],heap[m]];k=m}}return top};
+  while(heap.length){const [,i]=pop();if(closed[i])continue;closed[i]=1;if(i===t)break;
+    const x=i%W,y=(i/W)|0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=W||ny>=H)continue;
+      const j=ny*W+nx;if(closed[j]||(!passable(j)&&j!==t))continue;const d=(dx&&dy)?1.414:1;const ng=g[i]+d*cost(j);
+      if(ng<g[j]){g[j]=ng;came[j]=i;push(ng+Math.hypot(tx-nx,ty-ny),j)}}}
+  if(came[t]<0&&s!==t)return null;const path=[];let k=t;while(k!==-1){path.push(k);if(k===s)break;k=came[k]}return path.reverse()}
+
+function clearSpot(x,y){const i=y*W+x;if(passable(i))return[x,y];
+  for(let r=1;r<8;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const nx=x+dx,ny=y+dy;if(nx>=0&&ny>=0&&nx<W&&ny<H&&passable(ny*W+nx))return[nx,ny]}return[x,y]}
+
+function compute(){
+  route=[];legs=[];
+  const seq=[...stops,stops[0]];
+  for(let k=0;k<seq.length-1;k++){
+    const [ax,ay]=clearSpot(seq[k].x,seq[k].y),[bx,by]=clearSpot(seq[k+1].x,seq[k+1].y);
+    const p=astar(ax,ay,bx,by);
+    if(!p){legs.push({fail:true,from:k});continue}
+    let dist=0,up=0,smax=0,tmin=0;
+    for(let j=1;j<p.length;j++){const a=p[j-1],b=p[j];const d=Math.hypot((a%W)-(b%W),((a/W)|0)-((b/W)|0))*CELL;
+      const dh=elev[b]-elev[a];dist+=d;if(dh>0)up+=dh;smax=Math.max(smax,slope[b]);
+      const grade=dh/d;const tobler=Math.exp(-3.5*Math.abs(grade+0.05))/Math.exp(-3.5*0.05);
+      const v=speedKmh*tobler*(sand[b]?0.6:1);tmin+=(d/1000)/v*60}
+    legs.push({path:p,dist,up,smax,tmin,from:k});route.push(...p)}
+}
+
+function fmtT(m){const h=Math.floor(m/60),mm=Math.round(m%60);return h?`${h} h ${String(mm).padStart(2,'0')}`:`${mm} min`}
+function stats(){
+  const ok=legs.filter(l=>!l.fail);
+  const dist=ok.reduce((a,l)=>a+l.dist,0),up=ok.reduce((a,l)=>a+l.up,0),smax=Math.max(0,...ok.map(l=>l.smax)),walk=ok.reduce((a,l)=>a+l.tmin,0);
+  const sci=(stops.length-1)*sciMin,tot=walk+sci,marg=evaH*60-tot;
+  let rov=0;for(const i of route){const d=Math.hypot((i%W)-rover().x,((i/W)|0)-rover().y)*CELL;rov=Math.max(rov,d)}
+  sDist.textContent=(dist/1000).toFixed(2)+' km';sUp.textContent=Math.round(up)+' m';
+  sSlope.textContent=smax.toFixed(1)+'°';sWalk.textContent=fmtT(walk);sSci.textContent=fmtT(sci);sTot.textContent=fmtT(tot);
+  sMarg.textContent=(marg<0?'−':'')+fmtT(Math.abs(marg));sMarg.style.color=marg<0?'var(--bad)':marg<60?'var(--warn)':'var(--ok)';
+  sRov.textContent=(rov/1000).toFixed(2)+' km';
+  const A=[];
+  if(legs.some(l=>l.fail))A.push(['bad','A leg is impossible with the chosen max. slope: move a stop or raise the limit.']);
+  if(marg<0)A.push(['bad','Total duration exceeds endurance: remove a stop or cut science time.']);
+  else if(marg<60)A.push(['warn','Safety margin under 1 h.']);
+  else A.push(['ok','Route within endurance, with more than 1 h of margin.']);
+  if(smax>pMax*0.85)A.push(['warn','Sections near the slope limit: move slowly, crew roped together.']);
+  const sandCells=route.filter(i=>sand[i]).length;if(sandCells>20)A.push(['warn',`≈ ${Math.round(sandCells*CELL)} m of loose sand on the route: risk of sinking in.`]);
+  const endH=startH+tot/60;let tmin=99,tmax=-99,pmin=1e9,pmax=0;
+  for(let h=startH;h<=endH;h+=0.05){const t=tempC(h);tmin=Math.min(tmin,t);tmax=Math.max(tmax,t);const pp=presPa(h);pmin=Math.min(pmin,pp);pmax=Math.max(pmax,pp)}
+  wWin.textContent=clock(startH)+' → '+clock(endH);wMin.textContent=Math.round(tmin)+' °C';wMax.textContent=Math.round(tmax)+' °C';wP.textContent=Math.round(pmin)+'–'+Math.round(pmax)+' Pa';
+  if(endH>SUNSET)A.push(['bad','The walk ends after sunset ('+clock(endH)+'): start earlier or remove a stop.']);
+  if(startH<SUNRISE+1)A.push(['warn','Early start: very cold air (below −70 °C) and low light.']);
+  else if(tmin<-60)A.push(['warn','Cold part of the day included (down to '+Math.round(tmin)+' °C): check suit heating.']);
+  drawWx(startH,endH);
+  A.push(['warn','Radiation and space weather: not covered by the challenge resources (future improvement).']);
+  alerts.innerHTML=A.map(([k,t])=>`<div class="alert ${k}">${t}</div>`).join('');
+  let tt=startH*60;arrive=[startH];legs.forEach((l,k)=>{if(k<stops.length-1){tt+=(l.fail?0:l.tmin);arrive.push(tt/60);tt+=sciMin}});
+  return {walk,tot,marg}
+}
+
+let arrive=[];
+function drawWx(a,b){const g=wx.getContext('2d'),w=300,h=130,X=t=>20+t/24*(w-40),Y=t=>15+(-15-t)/75*(h-35);g.clearRect(0,0,w,h);
+  g.fillStyle='#ffffff10';g.fillRect(X(0),10,X(SUNRISE)-X(0),h-30);g.fillRect(X(SUNSET),10,X(24)-X(SUNSET),h-30);
+  g.fillStyle='#ff7a3d33';g.fillRect(X(a),10,X(Math.min(24,b))-X(a),h-30);
+  g.strokeStyle='#59d9ff';g.lineWidth=2;g.beginPath();for(let t=0;t<=24;t+=.1){const x=X(t),y=Y(tempC(t));t?g.lineTo(x,y):g.moveTo(x,y)}g.stroke();
+  g.fillStyle='#a8948a';g.font='10px Inter';g.textAlign='center';[0,6,12,18,24].forEach(t=>g.fillText(String(t).padStart(2,'0')+':00',X(t),h-6));
+  g.textAlign='left';g.fillText('−20 °C',X(0)+2,Y(-20)+3);g.fillText('−80 °C',X(0)+2,Y(-80)-2);g.fillStyle='#ff7a3d';g.fillText('EVA',X(a)+3,22);
+  g.fillStyle='#a8948a';g.fillText('night',X(SUNSET)+4,22)}
+function renderStops(){
+  const el=document.getElementById('stops');el.innerHTML='';
+  stops.forEach((s,k)=>{const d=document.createElement('div');d.className='stop'+(k===sel?' sel':'');
+    const leg=legs[k-1];const info=(k&&leg&&!leg.fail?` · ${(leg.dist/1000).toFixed(2)} km from previous stop`:'')+(arrive[k]!==undefined?`<br>${k?'Arrive':'Leave'} ${clock(arrive[k])} · ${Math.round(tempC(arrive[k]))} °C · ${Math.round(presPa(arrive[k]))} Pa`:'');
+    d.innerHTML=`<div class="t">${s.name}</div><div class="d">${UNIT_NAMES[unit[s.y*W+s.x]]} · ${Math.round(elev[s.y*W+s.x])} m${info}</div>`+
+     (k===sel?`<p class="d" style="color:var(--text)">${s.desc}</p><div class="d"><b style="color:var(--accent)">What you will see:</b> ${s.see}</div>
+      <div class="pov">${s.img?`<img src="${s.img}">`:'Ground view: import a Perseverance photo (Navcam / Mastcam-Z) of this type of terrain'}</div>
+      <label class="file">↥ Import this stop's photo<input type="file" accept="image/*"></label>
+      ${k?'<div><button class="btn" style="margin-top:6px;font-size:12px" data-del>Delete this stop</button></div>':''}`:'');
+    d.onclick=e=>{if(e.target.closest('label,input,button'))return;sel=k;renderStops();draw()};
+    const fi=d.querySelector('input[type=file]');if(fi)fi.onchange=e=>{const f=e.target.files[0];if(f){s.img=URL.createObjectURL(f);renderStops()}};
+    const db=d.querySelector('[data-del]');if(db)db.onclick=()=>{stops.splice(k,1);sel=0;update()};
+    el.appendChild(d)})
+}
+
+// ---------- Drawing ----------
+function draw(){
+  ctx.imageSmoothingEnabled=true;ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);
+  const base=LAYERS.filter(L=>L.on&&!L.overlay);
+  base.forEach((L,k)=>{ctx.globalAlpha=k===0?1:+op.value/100;
+    if(uploaded[L.id])ctx.drawImage(uploaded[L.id],0,0,c.width,c.height);else ctx.drawImage(layerImg[L.id],0,0,c.width,c.height)});
+  ctx.globalAlpha=1;
+  if(LAYERS.find(l=>l.id==='dangers').on){
+    for(let i=0;i<W*H;i++){const x=(i%W)*PX,y=((i/W)|0)*PX;
+      if(rock[i]){ctx.fillStyle='#ff5a5a';ctx.beginPath();ctx.arc(x+PX/2,y+PX/2,1.8,0,7);ctx.fill()}
+      else if(slope[i]>pMax){ctx.fillStyle='rgba(255,90,90,.35)';ctx.fillRect(x,y,PX,PX)}
+      else if(sand[i]){ctx.fillStyle='rgba(255,192,77,.18)';ctx.fillRect(x,y,PX,PX)}}}
+  // route
+  legs.forEach(l=>{if(l.fail)return;ctx.lineWidth=4;ctx.strokeStyle='#000a';ctx.beginPath();
+    l.path.forEach((i,j)=>{const x=(i%W)*PX+PX/2,y=((i/W)|0)*PX+PX/2;j?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+    ctx.lineWidth=2.4;ctx.strokeStyle=l.from===stops.length-1?'#59d9ff':'#fff';ctx.setLineDash(l.from===stops.length-1?[6,5]:[]);ctx.stroke();ctx.setLineDash([])});
+  // stops
+  stops.forEach((s,k)=>{const x=s.x*PX+PX/2,y=s.y*PX+PX/2;
+    ctx.fillStyle=k===0?'#59d9ff':'#ff7a3d';ctx.strokeStyle=k===sel?'#fff':'#000';ctx.lineWidth=k===sel?3:1.5;
+    ctx.beginPath();k===0?ctx.rect(x-8,y-8,16,16):ctx.arc(x,y,9,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#120c0a';ctx.font='bold 11px Inter';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(k===0?'R':String.fromCharCode(64+k),x,y+.5);
+    ctx.font='600 13px Inter';ctx.textAlign='left';ctx.lineWidth=3;ctx.strokeStyle='#000c';ctx.strokeText(s.name,x+13,y-12);ctx.fillStyle='#fff';ctx.fillText(s.name,x+13,y-12)});
+  // north arrow
+  ctx.fillStyle='#fff';ctx.font='bold 14px Rajdhani';ctx.textAlign='center';ctx.fillText('N',30,24);
+  ctx.beginPath();ctx.moveTo(30,32);ctx.lineTo(24,48);ctx.lineTo(30,44);ctx.lineTo(36,48);ctx.closePath();ctx.fill();
+}
+
+function update(){compute();stats();renderStops();draw();updHud()}
+
+c.onclick=e=>{const r=c.getBoundingClientRect();const x=Math.floor((e.clientX-r.left)/r.width*W),y=Math.floor((e.clientY-r.top)/r.height*H);
+  if(addMode){stops.push({name:`${String.fromCharCode(64+stops.length)} · New stop`,x,y,desc:"Science goal to be defined by the team.",see:"To be completed with a Perseverance photo.",img:null});
+    sel=stops.length-1;addMode=false;bAdd.classList.remove('on');hint.textContent='Stop added. Route recalculated.';update();return}
+  let best=-1,bd=4;stops.forEach((s,k)=>{const d=Math.hypot(s.x-x,s.y-y);if(d<bd){bd=d;best=k}});
+  if(best>=0){sel=best;renderStops();draw()}
+  else{const i=y*W+x;hint.textContent=`${UNIT_NAMES[unit[i]]} · elevation ${Math.round(elev[i])} m · slope ${slope[i].toFixed(1)}°${sand[i]?' · loose sand':''}${rock[i]?' · boulder':''}`}};
+bAdd.onclick=()=>{addMode=!addMode;bAdd.classList.toggle('on',addMode);hint.textContent=addMode?'Click the map to place the new stop':'Click a stop to view it'};
+bReset.onclick=()=>{stops=JSON.parse(JSON.stringify(DEFAULT_STOPS)).map(s=>({...s,img:null}));sel=0;update()};
+op.oninput=draw;
+speed.oninput=()=>{speedKmh=speed.value/10;vS.textContent=speedKmh.toFixed(1);update()};
+sci.oninput=()=>{sciMin=+sci.value;tS.textContent=sciMin;update()};
+eva.oninput=()=>{evaH=+eva.value;eS.textContent=evaH;update()};
+start.oninput=()=>{startH=start.value/2;stS.textContent=clock(startH);update()};
+pmax.oninput=()=>{pMax=+pmax.value;pS.textContent=pMax;update()};
+
+// ---------- HUD ----------
+const hud=document.getElementById('hud'),mini=document.getElementById('mini').getContext('2d');
+bHud.onclick=()=>{hud.classList.add('on');bHud.classList.add('on');bPlan.classList.remove('on');updHud()};
+bExit.onclick=bPlan.onclick=()=>{hud.classList.remove('on');bHud.classList.remove('on');bPlan.classList.add('on')};
+prog.oninput=updHud;
+function updHud(){
+  const ok=legs.filter(l=>!l.fail);if(!ok.length)return;
+  const all=[];ok.forEach(l=>l.path.forEach(i=>all.push([i,l.from])));
+  const k=Math.min(all.length-1,Math.floor(prog.value/1000*(all.length-1)));const [ci,leg]=all[k];
+  const cx=ci%W,cy=(ci/W)|0;const nextIdx=(leg+1)%stops.length;const nx=stops[nextIdx];
+  // remaining distance on current leg
+  let rem=0;for(let j=k+1;j<all.length&&all[j][1]===leg;j++){const a=all[j-1][0],b=all[j][0];rem+=Math.hypot((a%W)-(b%W),((a/W)|0)-((b/W)|0))*CELL}
+  const ahead=all[Math.min(all.length-1,k+3)][0];const ang=Math.atan2((ahead%W)-cx,-(((ahead/W)|0)-cy))*180/Math.PI;
+  document.getElementById('hArrow').style.transform=`rotate(${ang}deg)`;
+  hNext.textContent=nextIdx===0?'RETURN TO ROVER':nx.name.split('·')[0].trim()+' · '+(nx.name.split('·')[1]||'').trim();
+  hDist.textContent=rem>=1000?(rem/1000).toFixed(2)+' km':Math.round(rem)+' m';
+  hEta.textContent='≈ '+fmtT((rem/1000)/speedKmh*60);
+  const s=slope[ci];hSlope.textContent='SLOPE '+s.toFixed(1)+'°';hSlope.className=s>pMax*.8?'warnh':'';
+  hTerrain.textContent=(sand[ci]?'LOOSE SAND · SLOW DOWN':UNIT_NAMES[unit[ci]].toUpperCase());hTerrain.className=sand[ci]?'warnh':'';
+  const st=stats();const frac=k/(all.length-1);const used=st.tot*frac;const left=evaH*60-used;
+  hO2.textContent=fmtT(Math.max(0,left));const now=startH+used/60;hClock.textContent='MARS TIME '+clock(now);hTemp.textContent=Math.round(tempC(now))+' °C';hPres.textContent=Math.round(presPa(now))+' Pa';
+  const dr=Math.hypot(cx-rover().x,cy-rover().y)*CELL;const ret=(dr/1000)/speedKmh*60*1.2;
+  hRet.textContent=fmtT(ret);
+  hWarn.innerHTML=left-ret<45?'<span class="badh">POINT OF NO RETURN NEAR</span>':'';
+  // minimap
+  mini.clearRect(0,0,200,140);mini.globalAlpha=.6;mini.drawImage(layerImg.optique,0,0,200,140);mini.globalAlpha=1;
+  mini.strokeStyle='#59d9ff';mini.lineWidth=1.5;mini.beginPath();all.forEach(([i],j)=>{const x=i%W,y=(i/W)|0;j?mini.lineTo(x,y):mini.moveTo(x,y)});mini.stroke();
+  stops.forEach((s,q)=>{mini.fillStyle=q?'#ff7a3d':'#fff';mini.fillRect(s.x-2,s.y-2,4,4)});
+  mini.fillStyle='#fff';mini.beginPath();mini.arc(cx,cy,4,0,7);mini.fill();
+}
+update();
+</script>
+</body>
+</html>
